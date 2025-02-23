@@ -1,5 +1,4 @@
 import * as sdk from '@hypewatch/sdk';
-// import ParseMode from 'node-telegram-bot-api';
 
 export const BURN_EVENT: number = 5
 export const MINT_EVENT: number = 4
@@ -20,6 +19,4 @@ export const NO_TRANSACTIONS_FOUND = (signature: string) => `Для сигнат
 export const BOT_START: string = 'Telegram bot initialized';
 export const ERROR_BOT_START: string = 'Telegram bot is not initialized. Call initTelegramBot() first.';
 export const TELEGRAM_SEND_ERROR = (err: unknown) => `Failed to send message to Telegram: ${err}`;
-
-// export const HTML_PARSE_MODE: ParseMode = 'HTML'
 
