@@ -20,3 +20,5 @@ export const BOT_START: string = 'Telegram bot initialized';
 export const ERROR_BOT_START: string = 'Telegram bot is not initialized. Call initTelegramBot() first.';
 export const TELEGRAM_SEND_ERROR = (err: unknown) => `Failed to send message to Telegram: ${err}`;
 
+export const SOLANA_DEV: string = 'dev';
+export const SOLANA_MAIN: string = 'main';

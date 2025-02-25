@@ -10,7 +10,9 @@
   "description": "",
   "dependencies": {
     "@hypewatch/sdk": "^2.0.1",
+    "@solana/spl-token": "^0.4.12",
     "@solana/web3.js": "^1.98.0",
+    "bignumber.js": "^9.1.2",
     "dotenv": "^16.4.7",
     "node-telegram-bot-api": "^0.66.0",
     "redis": "^4.7.0"
