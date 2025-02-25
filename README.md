@@ -21,6 +21,24 @@ This project scans events on Solana for [Hype.fun](https://hype.fun).
    PROGRAM_PUBKEY=DkeHHvSbJbHKu6M5dZqMNX7rqVeKBFLb1E1yq2PcnksK
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token
    TELEGRAM_CHAT_ID=your_telegram_chat_id
+   PROGRAM_VERSION=6
+   HYPE_DEV_URL=https://dev.hype.vote/
+   HYPE_MAIN_URL=https://hype.fun/
+   SOLANA_ENV=dev
+   ```
+
+   Note: `SOLANA_ENV` can have values `main` and `dev`.
+
+   For `devnet`:
+   ```dotenv
+   SOLANA_PROGRAM_VERSION=6
+   SOLANA_PROGRAM_ID=DkeHHvSbJbHKu6M5dZqMNX7rqVeKBFLb1E1yq2PcnksK
+   ```
+
+   For `mainnet`:
+   ```dotenv
+   PROGRAM_ID=HYPExvaQRQHrkCNc1DAHJoByUeBqFvkJyhtpFdacLcdH
+   PROGRAM_VERSION=0
    ```
 
 ## Running the Bot

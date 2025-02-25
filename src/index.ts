@@ -3,8 +3,6 @@ import { subscribeToSolanaLogs } from './solanaLogsListener';
 import { TELEGRAM_BOT_TOKEN } from './config'
 
 async function main() {
-  // initTelegramBot();
-
   initBot(TELEGRAM_BOT_TOKEN)
   .then(() => {
     console.log('Бот Telegram успешно запущен.');

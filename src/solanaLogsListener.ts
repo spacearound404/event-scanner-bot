@@ -1,16 +1,17 @@
-import { Connection, PublicKey, Logs, Commitment, Signer } from '@solana/web3.js';
-import { PROGRAM_PUBKEY, SOLANA_RPC_URL, PROGRAM_VERSION } from './config';
+import { Connection, PublicKey, Logs, Commitment } from '@solana/web3.js';
+import { PROGRAM_PUBKEY, SOLANA_RPC_URL } from './config';
 import { broadcastEventNotification } from './telegramBot';
-import { getAssociatedTokenAddress, getOrCreateAssociatedTokenAccount, getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import * as sdk from '@hypewatch/sdk';
-import { NETWORK_ID, COMMITMENT, HYPE_DEV_URL, HYPE_MAIN_URL, SOLANA_MAIN_URL, SOLANA_ENV, SOLANA_DEV_URL, TICKER } from './config'
+import * as CFG from './config'
 import { TradeTransaction , NewTokenTransaction, Transaction } from './types'
-import { isAlreadyProcessed, markAsProcessed } from './utils'
+import { isAlreadyProcessed, markAsProcessed, createMessage, getTokenPrice } from './utils'
 import * as CONST from './const'
 import BigNumber from 'bignumber.js';
 
 
-const connection = new Connection(SOLANA_RPC_URL, COMMITMENT as Commitment);
+const connection = new Connection(SOLANA_RPC_URL, CFG.COMMITMENT as Commitment);
+const root: sdk.RootAccount = new sdk.RootAccount();
 
 
 export function subscribeToSolanaLogs(): void {
@@ -32,7 +33,7 @@ export function subscribeToSolanaLogs(): void {
 
       markAsProcessed(logs.signature);
     },
-    COMMITMENT
+    CFG.COMMITMENT
   );
 }
 
@@ -59,7 +60,6 @@ async function handleLogs(logs: Logs): Promise<void> {
     }
   }
 }
-
 
 function parseLogsToTransactions(logs: Logs): { transactions: Transaction[]; lastOrderId: number } {
   let reports: sdk.Report[] = [];
@@ -148,15 +148,15 @@ async function formatMessageForTelegram(transactions: Transaction[], signature: 
       return;
     }
 
-    let netTicker: string = TICKER[tx.networkId];
-    let baseUrl: string = HYPE_DEV_URL;
-    let buyerUrlScan: string = '';
-    let txUrlScan: string = '';
-    let priceDelta: string = '';
-    let spent: string = '';
-    let got: string = '';
+    let netTicker: string = CFG.TICKER[tx.networkId];
+    let baseUrl: string = CFG.HYPE_DEV_URL;
     let isFirstMint: boolean = true;
     let balanceAfterTx: number = 0;
+    let buyerUrlScan: string = '';
+    let priceDelta: string = '';
+    let txUrlScan: string = '';
+    let spent: string = '';
+    let got: string = '';
 
     const tokenPriceUsd: BigNumber = getTokenPrice(tx.supply, root);
     const marketCap: string = tokenPriceUsd.multipliedBy(new BigNumber(tx.supply)).toFixed(2);
@@ -168,33 +168,33 @@ async function formatMessageForTelegram(transactions: Transaction[], signature: 
 
     if (tx.type == CONST.MINT_TYPE) {
       spent = `$${tx.baseCrncyAmount.toFixed(2)}`;
-      got = `${tx.supplyDelta} HYPE`;
+      got = `${tx.supplyDelta} ${CONST.HYPE_CRNY_TICKER}`;
     } 
 
     if (tx.type == CONST.BURN_TYPE) {
-      spent = `${tx.supplyDelta} HYPE`;
+      spent = `${tx.supplyDelta} ${CONST.HYPE_CRNY_TICKER}`;
       got = `$${tx.baseCrncyAmount.toFixed(2)}`;
     }
 
-    if (SOLANA_ENV === CONST.SOLANA_DEV) {
-      baseUrl = `${HYPE_DEV_URL}${netTicker}/${tx.address}`;
-      buyerUrlScan = `${SOLANA_DEV_URL}address/${tx.wallet}?cluster=devnet`;
-      txUrlScan = `${SOLANA_DEV_URL}tx/${tx.id}?cluster=devnet`;
+    if (CFG.SOLANA_ENV === CONST.SOLANA_DEV) {
+      baseUrl = `${CFG.HYPE_DEV_URL}${netTicker}/${tx.address}`;
+      buyerUrlScan = CFG.SOLANA_SCAN_DEV_URL(CONST.ADDRESS_ENTITY, tx.wallet);
+      txUrlScan = CFG.SOLANA_SCAN_DEV_URL(CONST.TX_ENTITY, tx.id);
     }
 
-    if (SOLANA_ENV === CONST.SOLANA_MAIN) {
-      baseUrl = `${HYPE_MAIN_URL}${netTicker}/${tx.address}`;
-      buyerUrlScan = `${SOLANA_MAIN_URL}account/${tx.wallet}`;
-      txUrlScan = `${SOLANA_MAIN_URL}tx/${tx.id}`;
+    if (CFG.SOLANA_ENV === CONST.SOLANA_MAIN) {
+      baseUrl = `${CFG.HYPE_MAIN_URL}${netTicker}/${tx.address}`;
+      buyerUrlScan = CFG.SOLANA_SCAN_MAIN_URL(CONST.ACCOUNT_ENTITY, tx.wallet);
+      txUrlScan = CFG.SOLANA_SCAN_MAIN_URL(CONST.TX_ENTITY, tx.id);
     }
 
-    const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
     const token2022Accounts = await connection.getParsedTokenAccountsByOwner(
       new PublicKey(tx.wallet),
       { programId: TOKEN_2022_PROGRAM_ID }
     );
 
     const account = token2022Accounts.value.find(account => account?.account?.data?.parsed?.info?.mint.toString() === tx.token);
+    
     if (account) {
       balanceAfterTx = account?.account?.data?.parsed?.info?.tokenAmount?.uiAmount;
     }
@@ -205,19 +205,7 @@ async function formatMessageForTelegram(transactions: Transaction[], signature: 
       isFirstMint = false;
     }
 
-    let message = `
-<b> <a href="${baseUrl}">${tx.address}</a> | <a href="${baseUrl}">${NETWORK_ID[tx.networkId]}</a> | ${tx.type == CONST.MINT_TYPE ? "BUY!": "SELL"} </b>
-🫧🫧🫧🫧🫧🫧🫧🫧🫧🫧🫧🫧
-🫧🫧🫧🫧🫧🫧🫧🫧🫧🫧🫧🫧
-🔀 <b>Spent:</b> ${spent} 
-🔀 <b>Got:</b> ${got}
-👤 <b></b><a href="${buyerUrlScan}">Buyer</a> | <b></b><a href="${txUrlScan}">TX</a>${isFirstMint ? `\n<a href="${buyerUrlScan}">🪙 New Holder</a>` : ''}
-🏷 <b>Price:</b> $${tokenPriceUsd.toFixed(2)} (${tx.supplyDelta.toFixed(2)}%)
-💸 <b>Market Cap:</b> $${marketCap}
-<a href="https://hype.fun/">Hype.fun</a> | <a href="https://x.com/hype_protocol">Twitter</a> | <a href="https://t.me/hype_fam">Telegram</a>
-    `.trim();
-
-    return message;
+    return createMessage(baseUrl, tx, spent, got, buyerUrlScan, txUrlScan, isFirstMint, tokenPriceUsd, marketCap);
     });
 
     const messages = await Promise.all(messagePromises);
@@ -227,81 +215,3 @@ async function formatMessageForTelegram(transactions: Transaction[], signature: 
     .join('')
     .trim();
 }
-
-function calculateReserve(
-  currentSupply: number | BigNumber,
-  rootData: any
-) {
-  const bnCurrentSupply = new BigNumber(currentSupply);
-  return new BigNumber(rootData.maxSupply)
-    .multipliedBy(bnCurrentSupply)
-    .multipliedBy(rootData.initPrice)
-    .dividedBy(new BigNumber(rootData.maxSupply).minus(bnCurrentSupply));
-}
-
-function getTokenPrice(
-  currentSupply: number | BigNumber,
-  rootData: any,
-  reserveParam?: number | BigNumber
-) {
-  const reserve =
-    reserveParam === undefined
-      ? calculateReserve(currentSupply, rootData)
-      : new BigNumber(reserveParam);
-
-  return reserve
-    .plus(new BigNumber(rootData.maxSupply).multipliedBy(new BigNumber(rootData.initPrice)))
-    .dividedBy(new BigNumber(rootData.maxSupply).minus(currentSupply));
-}
-
-export async function printRoot() {
-  const version = Number(process.env.NEXT_PUBLIC_VERSION);
-  const connection = new Connection(
-    process.env.NEXT_PUBLIC_PROVIDER!,
-    "confirmed"
-  );
-  const programId = new PublicKey(process.env.NEXT_PUBLIC_PROGRAM_ID!);
-  const root = new sdk.RootAccount();
-  const rootAccount = sdk.findRootAccountAddress(programId, version);
-  const rootAccountInfo = await connection.getAccountInfo(rootAccount);
-
-  root.update(rootAccountInfo!.data);
-  return {
-    admin: root.admin.toString() as any,
-    tvl: root.tvl,
-    tokensCount: root.tokensCount,
-    counter: root.counter,
-    clientsCount: root.clientsCount,
-    allTimeBaseCrncyVolume: root.allTimeBaseCrncyVolume,
-    maxSupply: root.maxSupply,
-    initPrice: root.initPrice,
-    feeRate: root.feeRate,
-    minFees: root.minFees,
-    creationFee: root.creationFee,
-    fees: root.fees,
-    holderFees: root.holderFees,
-    networks: (root.networks?.map((n: sdk.NetworkRecord) => n.descriptor) ??
-      []) as any,
-  };
-}
-
-type Root = Awaited<ReturnType<typeof printRoot>>;
-
-let root = new sdk.RootAccount();
-
-(async () => {
-  try {
-    const rootAccount = sdk.findRootAccountAddress(new PublicKey(PROGRAM_PUBKEY), parseInt(PROGRAM_VERSION));
-    const rootAccountInfo = await connection.getAccountInfo(rootAccount);
-    
-    if (!rootAccountInfo) {
-      throw new Error("Root account not found or is empty");
-    }
-
-    root.update(rootAccountInfo.data);
-
-    console.log("✅ Root account initialized:", root);
-  } catch (error) {
-    console.error("❌ Error initializing root account:", error);
-  }
-})();
