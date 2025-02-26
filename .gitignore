@@ -1,2 +1,4 @@
 node_modules
 .env
+src/chat_ids.json
+src/chatContext.json

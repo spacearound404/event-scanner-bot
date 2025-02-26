@@ -1,30 +1,19 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { promises as fs } from 'fs';
-import path from 'path';
 import * as CFG from './config'
 import * as CONST from './const'
-
+import { loadChatIds, loadChatContext, getChatContext } from './bot/utils'
+import { handleMessage } from './bot/messageHandler';
+import { handleCommands } from './bot/commandHandler';
+import { handleCallbackQuery } from './bot/callbackQueryHandler';
+import { TradeTransaction , NewTokenTransaction, Transaction } from './types'
 
 let bot: TelegramBot;
 let chatIds = new Set<number>();
-const CHAT_ID_FILE = path.resolve(__dirname, CFG.TELEGRAM_CHAT_IDS_PATH);
 
-
-async function loadChatIds(): Promise<Set<number>> {
-  try {
-    const data = await fs.readFile(CHAT_ID_FILE, CONST.UTF_8) as string;
-    const storedIds = JSON.parse(data) as number[];
-    return new Set(storedIds);
-  } catch {
-    return new Set<number>();
-  }
-}
-
-async function saveChatIds(ids: Set<number>): Promise<void> {
-  await fs.writeFile(CHAT_ID_FILE, JSON.stringify(Array.from(ids)), CONST.UTF_8);
-}
 
 export async function initBot(token: string): Promise<void> {
+  await loadChatContext();
+
   chatIds = await loadChatIds();
 
   bot = new TelegramBot(token, { polling: true });
@@ -32,37 +21,42 @@ export async function initBot(token: string): Promise<void> {
   const me = await bot.getMe();
   const myUsername = me.username || '';
 
-  bot.on('message', async (msg) => {
-    if (msg.new_chat_members) {
-      const botUser = msg.new_chat_members.find(
-        (member) => member.username === myUsername
-      );
-      if (botUser) {
-        chatIds.add(msg.chat.id);
-        await saveChatIds(chatIds);
-      }
-    }
-  });
-
-  bot.on('my_chat_member', async (msg) => {
-    if (msg.new_chat_member && msg.new_chat_member.user.username === myUsername) {
-      if (msg.new_chat_member.status === CONST.ADMIN_CHAT_MEMBER_STATUS) {
-        chatIds.add(msg.chat.id);
-        await saveChatIds(chatIds);
-      }
-    }
-  });
+  handleCommands(bot, myUsername, chatIds);
+  handleMessage(bot, myUsername, chatIds);
+  handleCallbackQuery(bot);
 }
 
-export async function broadcastEventNotification(text: string): Promise<void> {
+export async function broadcastEventNotification(transactions: Transaction[], text: string): Promise<void> {
   if (!bot) {
     throw new Error(CONST.ERROR_BOT_START);
   }
   for (const id of chatIds) {
-    try {
+    if (id < 0) {
       await bot.sendMessage(id, text, { parse_mode: 'HTML' });
-    } catch (error) {
-      console.error(CONST.TELEGRAM_SEND_ERROR(id), error);
+    } else {
+      try {
+        const context = getChatContext(id);
+
+        if (!context) {
+          await bot.sendMessage(id, text, { parse_mode: 'HTML' });
+        } else {
+          for (const transaction of transactions) {
+            if (context.token && context.token.toLocaleLowerCase() !== transaction.address.toLocaleLowerCase()) continue;
+            if (context.networkName && context.networkName.toLocaleLowerCase() !== CFG.NETWORK_ID[transaction.networkId].toLocaleLowerCase()) continue;
+            if (context.eventTypes && !context.eventTypes.includes(transaction.type.toLocaleLowerCase())) continue;
+            if (context.mintAddress && context.mintAddress !== transaction.wallet) continue;
+
+            if (transaction.type == 'mint') {
+              if (context.minPrice && transaction.baseCrncyAmount <= context.minPrice) continue;
+              if (context.maxPrice && transaction.baseCrncyAmount >= context.maxPrice) continue;
+            }
+  
+            await bot.sendMessage(id, text, { parse_mode: 'HTML' });
+          }
+        }
+      } catch (error) {
+        console.error(CONST.TELEGRAM_SEND_ERROR(id), error);
+      }
     }
   }
 }

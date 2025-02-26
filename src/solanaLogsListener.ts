@@ -52,11 +52,13 @@ async function handleLogs(logs: Logs): Promise<void> {
 
   const { transactions } = parseLogsToTransactions(logs);
 
+  console.log(transactions);
+
   if (transactions.length) {
     const formattedMessage = await formatMessageForTelegram(transactions, logs.signature);
 
     if (formattedMessage.trim().length > 0) {
-      broadcastEventNotification(formattedMessage);
+      broadcastEventNotification(transactions, formattedMessage);
     }
   }
 }
