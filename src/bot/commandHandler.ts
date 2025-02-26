@@ -25,6 +25,9 @@ export function handleCommands(bot: TelegramBot, myUsername: string, chatIds: Se
                 'mintAddress': undefined,
                 'minPrice': undefined,
                 'maxPrice': undefined,
+                'chatIds': undefined,
+                'selectedChatId': undefined,
+                'previousMessageId': undefined
             };
 
             await saveChatContext();

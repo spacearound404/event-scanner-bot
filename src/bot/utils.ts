@@ -13,7 +13,8 @@ type UserState =
   | 'awaitingTokenName'
   | 'awaitingMintAddress'
   | 'awaitingMinPrice'
-  | 'awaitingMaxPrice';
+  | 'awaitingMaxPrice'
+  | 'returnToFilterSettings';
 
 export let chatContext: Record<number, FilterData> = {};
 export let userState: Record<number, UserState> = {};
@@ -25,6 +26,9 @@ interface FilterData {
     eventTypes?: string[];
     minPrice?: number;
     maxPrice?: number;
+    chatIds?: number[];
+    selectedChatId?: string;
+    previousMessageId?: number;
   }
 
 export function createPersistentObject<T extends object>(

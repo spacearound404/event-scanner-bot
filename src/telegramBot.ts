@@ -31,32 +31,34 @@ export async function broadcastEventNotification(transactions: Transaction[], te
     throw new Error(CONST.ERROR_BOT_START);
   }
   for (const id of chatIds) {
-    if (id < 0) {
-      await bot.sendMessage(id, text, { parse_mode: 'HTML' });
-    } else {
-      try {
-        const context = getChatContext(id);
+    // if (id < 0) {
+    //   await bot.sendMessage(id, text, { parse_mode: 'HTML' });
+    // } else {
+    try {
+      const context = getChatContext(id);
 
-        if (!context) {
-          await bot.sendMessage(id, text, { parse_mode: 'HTML' });
-        } else {
-          for (const transaction of transactions) {
-            if (context.token && context.token.toLocaleLowerCase() !== transaction.address.toLocaleLowerCase()) continue;
-            if (context.networkName && context.networkName.toLocaleLowerCase() !== CFG.NETWORK_ID[transaction.networkId].toLocaleLowerCase()) continue;
-            if (context.eventTypes && !context.eventTypes.includes(transaction.type.toLocaleLowerCase())) continue;
-            if (context.mintAddress && context.mintAddress !== transaction.wallet) continue;
+      console.log(context);
 
-            if (transaction.type == 'mint') {
-              if (context.minPrice && transaction.baseCrncyAmount <= context.minPrice) continue;
-              if (context.maxPrice && transaction.baseCrncyAmount >= context.maxPrice) continue;
-            }
-  
-            await bot.sendMessage(id, text, { parse_mode: 'HTML' });
+      if (!context) {
+        await bot.sendMessage(id, text, { parse_mode: 'HTML' });
+      } else {
+        for (const transaction of transactions) {
+          if (context.token && context.token.toLocaleLowerCase() !== transaction.address.toLocaleLowerCase()) continue;
+          if (context.networkName && context.networkName.toLocaleLowerCase() !== CFG.NETWORK_ID[transaction.networkId].toLocaleLowerCase()) continue;
+          if (context.eventTypes && !context.eventTypes.includes(transaction.type.toLocaleLowerCase())) continue;
+          if (context.mintAddress && context.mintAddress !== transaction.wallet) continue;
+
+          if (transaction.type == 'mint') {
+            if (context.minPrice && transaction.baseCrncyAmount <= context.minPrice) continue;
+            if (context.maxPrice && transaction.baseCrncyAmount >= context.maxPrice) continue;
           }
+
+          await bot.sendMessage(id, text, { parse_mode: 'HTML' });
         }
-      } catch (error) {
-        console.error(CONST.TELEGRAM_SEND_ERROR(id), error);
       }
+    } catch (error) {
+      console.error(CONST.TELEGRAM_SEND_ERROR(id), error);
     }
+    // }
   }
 }

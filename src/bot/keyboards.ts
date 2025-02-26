@@ -1,5 +1,5 @@
 
-import TelegramBot from 'node-telegram-bot-api';
+import TelegramBot, { ChatAdministratorRights } from 'node-telegram-bot-api';
 
 let bot: TelegramBot;
 
@@ -11,6 +11,20 @@ export function getFilterInlineKeyboard(): TelegramBot.InlineKeyboardMarkup {
       [{ text: 'by event', callback_data: 'filter:event' }],
       [{ text: 'by price', callback_data: 'filter:price' }],
       [{ text: 'clear filter', callback_data: 'filter:clear' }]
+    ]
+  };
+}
+
+export function getGroupFilterInlineKeyboard(): TelegramBot.InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: 'by token + network', callback_data: 'filter:token_network' }],
+      [{ text: 'by mint address', callback_data: 'filter:mint_address' }],
+      [{ text: 'by event', callback_data: 'filter:event' }],
+      [{ text: 'by price', callback_data: 'filter:price' }],
+      [{ text: 'clear filter', callback_data: 'filter:clear' }],
+      [{ text: 'delete group', callback_data: 'deleteGroup' }],
+      [{ text: 'return', callback_data: 'returnToGroups' }]
     ]
   };
 }
@@ -62,6 +76,43 @@ export const filterSettingMenu: TelegramBot.ReplyKeyboardMarkup = {
     [
       { text: 'Set filter' },
       { text: 'Set chat filter' }
+    ],
+    [
+      { text: 'Return' }
+    ]
+  ],
+  resize_keyboard: true,
+  one_time_keyboard: false
+};
+
+export const filterChatSettingMenu: TelegramBot.ReplyKeyboardMarkup = {
+  keyboard: [
+    [
+      {
+        text: 'Add private chat',
+        request_chat: {
+          request_id: 1,
+          chat_is_channel: false,
+          chat_has_username: false,
+        }
+      },
+      {
+        text: 'Add public chat',
+        request_chat: {
+          request_id: 2,
+          chat_is_channel: false,
+          chat_has_username: true,
+        }
+      },
+    ],
+    [
+      {
+        text: 'Add channel',
+        request_chat: {
+          request_id: 3,
+          chat_is_channel: true,
+        }
+      },
     ],
     [
       { text: 'Return' }
