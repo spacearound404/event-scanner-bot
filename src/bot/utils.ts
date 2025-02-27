@@ -39,7 +39,7 @@ export function createPersistentObject<T extends object>(
     set(target, property, value) {
       target[property as keyof T] = value;
       persistFn().catch((err) =>
-        console.error('Error auto-saving persistent object:', err)
+        console.error(CONST.ERROR_AUTO_SAVING_OBJECT, err)
       );
       return true;
     },
@@ -98,10 +98,27 @@ export async function saveChatContext() {
       'utf-8'
     );
   } catch (e) {
-    console.error('Failed to save chatContext', e);
+    console.error(CONST.FAILED_TO_SAVE_CHAT_CONTEXT, e);
   }
 }
 
 export async function saveChatIds(ids: Set<number>): Promise<void> {
   await fs.writeFile(CHAT_ID_FILE, JSON.stringify(Array.from(ids)), CONST.UTF_8);
+}
+
+export function generateFilterMessage(context: FilterData): string {
+  return `
+<b>🫧🫧Current filters🫧🫧</b>
+
+🏷️ Token: <b>${context?.token ? context?.token : 'not set'}</b>
+📱 Social media: <b>${context?.networkName ? context?.networkName : 'not set'}</b>
+———
+🎟️ Event: <b>${context?.eventTypes ? context?.eventTypes : 'not set'}</b>
+———
+🔗 Mint address: <b>${context?.mintAddress ? context?.mintAddress : 'not set'}</b>
+———
+📉 Min price: <b>${context?.minPrice ? context?.minPrice : 'not set'}</b>
+📈 Max price: <b>${context?.maxPrice ? context?.maxPrice : 'not set'}</b>
+
+👇 Choose filter:`;
 }

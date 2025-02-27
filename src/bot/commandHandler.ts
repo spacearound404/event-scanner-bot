@@ -1,11 +1,13 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getChatContext, loadChatIds, saveChatContext, saveChatIds, chatContext, userState } from './utils';
+import { loadChatIds, saveChatContext, saveChatIds, chatContext, userState } from './utils';
 import { mainMenu } from './keyboards';
+import * as CONST from '../const'
+
 
 export function handleCommands(bot: TelegramBot, myUsername: string, chatIds: Set<number>) {
     bot.on('my_chat_member', async (msg) => {
         if (msg.new_chat_member && msg.new_chat_member.user.username === myUsername) {
-            if (msg.new_chat_member.status === 'administrator') {
+            if (msg.new_chat_member.status === CONST.ADMIN_STATUS_MEMBER) {
                 chatIds.add(msg.chat.id);
                 await saveChatIds(chatIds);
             }
@@ -40,7 +42,7 @@ export function handleCommands(bot: TelegramBot, myUsername: string, chatIds: Se
 
         userState[chatId] = 'idle';
 
-        await bot.sendMessage(chatId, 'Welcome! Please choose an action:', {
+        await bot.sendMessage(chatId, CONST.WELCOME_MESSAGE, {
             reply_markup: mainMenu
         });
     });

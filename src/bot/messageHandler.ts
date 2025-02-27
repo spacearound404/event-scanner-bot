@@ -1,117 +1,90 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getChatContext, saveChatContext, saveChatIds, chatContext, userState } from './utils';
+import * as CONST from '../const'
+import { getChatContext, saveChatIds, userState, generateFilterMessage } from './utils';
 import { getFilterInlineKeyboard, getNetworkInlineKeyboard, filterSettingMenu, mainMenu, filterChatSettingMenu, getGroupFilterInlineKeyboard } from './keyboards';
+
 
 export function handleMessage(bot: TelegramBot, myUsername: string, chatIds: Set<number>) {
     bot.on('message', async (msg) => {
-        const state = userState[msg.chat.id] || 'idle';
+        let state = userState[msg.chat.id] || 'idle';
         let context = getChatContext(msg.chat.id);
+        let chatId = msg.chat.id;
+        let text = msg.text || '';
 
+        // handle selected chats/channel in bot
         if (msg.chat_shared) {
-
-            let botInfo = await bot.getMe();
-            let botId = botInfo.id;
-
-            const botMember = await bot.getChatMember(msg.chat_shared.chat_id, botId);
-
-            console.log(botMember);
-            
-            if (botMember.status != 'member' && botMember.status != 'administrator') {
-                await bot.sendMessage(msg.chat.id, 'First, add the bot to the chat and make it an administrator');
-
+            try {
+                let botInfo = await bot.getMe();
+                let botMember = await bot.getChatMember(msg.chat_shared.chat_id, botInfo.id);
+                
+                if (botMember.status != CONST.ADMIN_STATUS_MEMBER) {
+                    await bot.sendMessage(msg.chat.id, CONST.ADD_BOT_TO_CHAT);
+                    return;
+                }
+            } catch (error) {
+                await bot.sendMessage(msg.chat.id, CONST.ADD_BOT_TO_CHAT);
                 return;
             }
 
             const chatMember = await bot.getChatMember(msg.chat_shared.chat_id, msg.chat.id);
 
-            if (chatMember.status !== 'administrator' && chatMember.status !== 'creator') {
-                await bot.sendMessage(msg.chat.id, 'You do not have permission to edit filters.');
+            if (chatMember.status !== CONST.ADMIN_STATUS_MEMBER && chatMember.status !== CONST.CREATOR_STATUS_MEMBER) {
+                await bot.sendMessage(msg.chat.id, CONST.NO_PERMISSION_TO_EDIT_FILTERS);
                 return;
             }
 
-            if (!context?.chatIds) {
-                context.chatIds = [];
-            }
-
+            context.chatIds = context.chatIds || [];
             context.chatIds?.push(msg.chat_shared.chat_id);
-            
-            const sharedChatId = msg.chat_shared.chat_id;
-            chatIds.add(sharedChatId);
+    
+            chatIds.add(msg.chat_shared.chat_id);
             await saveChatIds(chatIds);
-            console.log(`Shared chat ID saved: ${sharedChatId}`);
 
-            let userChatIds = context.chatIds || [];
             let inline_keyboard = [];
 
-            inline_keyboard = await Promise.all(userChatIds.map(async (id) => {
+            inline_keyboard = await Promise.all(context.chatIds.map(async (id) => {
                 const chat = await bot.getChat(id);
                 return [{ text: chat.title || `Chat ${id}`, callback_data: `chat_${id}` }];
             }));
 
-            let sentMessage = await bot.sendMessage(msg.chat.id, 'Select a chat to set filter:', {
+            await bot.sendMessage(msg.chat.id, CONST.SELECT_CHAT_TO_SET_FILTER, {
                 reply_markup: {
                     inline_keyboard
                 }
             });
         }
 
+        // handle adding bot to chats/channel
         if (msg.new_chat_members) {
-            const botUser = msg.new_chat_members.find(
-            (member) => member.username === myUsername
-            );
+            const botUser = msg.new_chat_members.find((member) => member.username === myUsername);
             if (botUser) {
-            chatIds.add(msg.chat.id);
-            await saveChatIds(chatIds);
+                chatIds.add(msg.chat.id);
+                await saveChatIds(chatIds);
             }
         }
-        const chatId = msg.chat.id;
-        const text = msg.text || '';
 
         if (!text || msg.entities?.some((e) => e.type === 'bot_command')) {
             return;
         }
 
         if (state === 'awaitingTokenName' && text !== 'Filter setting' && text !== 'Set filter') {
-            if (context.selectedChatId) {
-                context = getChatContext(Number(context.selectedChatId));
-            }
+            context = context.selectedChatId ? getChatContext(Number(context.selectedChatId)) : context;
 
             context.token = text.trim();
-
             userState[chatId] = 'idle';
-            await bot.sendMessage(chatId, 'Choose network', {
-            reply_markup: getNetworkInlineKeyboard()
-            });
+
+            await bot.sendMessage(chatId, CONST.CHOOSE_NETWORK, {reply_markup: getNetworkInlineKeyboard()});
             return;
         }
 
         if (state === 'awaitingMintAddress' && text !== 'Filter setting' && text !== 'Set filter') {
-            if (context.selectedChatId) {
-                context = getChatContext(Number(context.selectedChatId));
-            }
+            context = context.selectedChatId ? getChatContext(Number(context.selectedChatId)) : context;
 
             context.mintAddress = text.trim();
             userState[chatId] = 'idle';
-            await bot.sendMessage(chatId, '✅ Mint address saved', {
-            reply_to_message_id: msg.message_id
-            });
 
-            let message = `
-<b>🫧🫧Current filters🫧🫧</b>
+            await bot.sendMessage(chatId, CONST.MINT_ADDRESS_SAVED, {reply_to_message_id: msg.message_id});
 
-🏷️ Token: <b>${context?.token ? context?.token : 'not set'}</b>
-📱 Social media: <b>${context?.networkName ? context?.networkName : 'not set'}</b>
-———
-🎟️ Event: <b>${context?.eventTypes ? context?.eventTypes : 'not set'}</b>
-———
-🔗 Mint address: <b>${context?.mintAddress ? context?.mintAddress : 'not set'}</b>
-———
-📉 Min price: <b>${context?.minPrice ? context?.minPrice : 'not set'}</b>
-📈 Max price: <b>${context?.maxPrice ? context?.maxPrice : 'not set'}</b>
-
-👇 Choose filter:`
-
-            let sentMessage = await bot.sendMessage(chatId, message, {
+            let sentMessage = await bot.sendMessage(chatId, generateFilterMessage(context), {
                 parse_mode: 'HTML',
                 reply_markup: context.selectedChatId ? getFilterInlineKeyboard() : getGroupFilterInlineKeyboard()
             });
@@ -121,79 +94,60 @@ export function handleMessage(bot: TelegramBot, myUsername: string, chatIds: Set
         }
 
         if (state === 'awaitingMinPrice' && text !== 'Filter setting' && text !== 'Set filter') {
-            if (context.selectedChatId) {
-                context = getChatContext(Number(context.selectedChatId));
-            }
+            context = context.selectedChatId ? getChatContext(Number(context.selectedChatId)) : context;
 
-            const parsed = parseFloat(text.replace(',', '.'));
+            let parsed = parseFloat(text.replace(',', '.'));
+
             if (!isNaN(parsed)) {
-            context.minPrice = parsed;
+                context.minPrice = parsed;
 
-            userState[chatId] = 'awaitingMaxPrice';
+                userState[chatId] = 'awaitingMaxPrice';
 
-            await bot.sendMessage(chatId, 'Enter the maximum price value:');
-            return;
+                await bot.sendMessage(chatId, CONST.ENTER_MAX_PRICE);
+                return;
             } else {
-            await bot.sendMessage(chatId, 'Invalid number input, please try again.');
-            return;
+                await bot.sendMessage(chatId, CONST.INVALID_NUMBER_INPUT);
+                return;
             }
         }
 
         if (state === 'awaitingMaxPrice' && text !== 'Filter setting' && text !== 'Set filter') {
-            if (context.selectedChatId) {
-                context = getChatContext(Number(context.selectedChatId));
-            }
+            context = context.selectedChatId ? getChatContext(Number(context.selectedChatId)) : context;
 
-            const parsed = parseFloat(text.replace(',', '.'));
+            let parsed = parseFloat(text.replace(',', '.'));
+
             if (!isNaN(parsed)) {
-            context.maxPrice = parsed;
+                context.maxPrice = parsed;
 
-            userState[chatId] = 'idle';
+                userState[chatId] = 'idle';
 
-            await bot.sendMessage(chatId, '✅ Prices saved');
+                await bot.sendMessage(chatId, CONST.PRICES_SAVED);
 
-            let message = `
-<b>🫧🫧Current filters🫧🫧</b>
+                let sentMessage = await bot.sendMessage(chatId, generateFilterMessage(context), {
+                    parse_mode: 'HTML',
+                    reply_markup: context.selectedChatId ? getFilterInlineKeyboard() : getGroupFilterInlineKeyboard()
+                });
 
-🏷️ Token: <b>${context?.token ? context?.token : 'not set'}</b>
-📱 Social media: <b>${context?.networkName ? context?.networkName : 'not set'}</b>
-———
-🎟️ Event: <b>${context?.eventTypes ? context?.eventTypes : 'not set'}</b>
-———
-🔗 Mint address: <b>${context?.mintAddress ? context?.mintAddress : 'not set'}</b>
-———
-📉 Min price: <b>${context?.minPrice ? context?.minPrice : 'not set'}</b>
-📈 Max price: <b>${context?.maxPrice ? context?.maxPrice : 'not set'}</b>
-
-👇 Choose filter:`
-
-            let sentMessage = await bot.sendMessage(chatId, message, {
-                parse_mode: 'HTML',
-                reply_markup: context.selectedChatId ? getFilterInlineKeyboard() : getGroupFilterInlineKeyboard()
-            });
-
-            context.previousMessageId = sentMessage.message_id;
-            return;
+                context.previousMessageId = sentMessage.message_id;
+                return;
             } else {
-            await bot.sendMessage(chatId, 'Invalid number input, please try again.');
-            return;
+                await bot.sendMessage(chatId, CONST.INVALID_NUMBER_INPUT);
+                return;
             }
         }
 
         if (text === 'Filter setting') {
-            await bot.sendMessage(chatId, 'Filter settings:', {
-            reply_markup: filterSettingMenu
-            });
+            await bot.sendMessage(chatId, CONST.FILTER_SETTINGS, {reply_markup: filterSettingMenu});
             return;
         }
 
         if (text === 'Return') {
             if (userState[chatId] == 'returnToFilterSettings') {
-                await bot.sendMessage(chatId, 'Filter settings:', {reply_markup: filterSettingMenu});
+                await bot.sendMessage(chatId, CONST.FILTER_SETTINGS, {reply_markup: filterSettingMenu});
 
                 userState[chatId] = 'idle';
             } else {
-                await bot.sendMessage(chatId, 'Main menu:', {reply_markup: mainMenu});
+                await bot.sendMessage(chatId, CONST.MAIN_MENU, {reply_markup: mainMenu});
             }
             return;
         }
@@ -201,22 +155,7 @@ export function handleMessage(bot: TelegramBot, myUsername: string, chatIds: Set
         if (text === 'Set filter') {            
             context.selectedChatId = undefined;
 
-            let message = `
-<b>🫧🫧Current filters🫧🫧</b>
-
-🏷️ Token: <b>${context?.token ? context?.token : 'not set'}</b>
-📱 Social media: <b>${context?.networkName ? context?.networkName : 'not set'}</b>
-———
-🎟️ Event: <b>${context?.eventTypes ? context?.eventTypes : 'not set'}</b>
-———
-🔗 Mint address: <b>${context?.mintAddress ? context?.mintAddress : 'not set'}</b>
-———
-📉 Min price: <b>${context?.minPrice ? context?.minPrice : 'not set'}</b>
-📈 Max price: <b>${context?.maxPrice ? context?.maxPrice : 'not set'}</b>
-
-👇 Choose filter:`
-
-            let sentMessage = await bot.sendMessage(chatId, message, {
+            let sentMessage = await bot.sendMessage(chatId, generateFilterMessage(context), {
                 parse_mode: 'HTML',
                 reply_markup: getFilterInlineKeyboard()
             });
@@ -230,11 +169,9 @@ export function handleMessage(bot: TelegramBot, myUsername: string, chatIds: Set
             let inline_keyboard = [];
             userState[chatId] = 'returnToFilterSettings';
 
-            await bot.sendMessage(chatId, 'Add the bot to a chat first and grant it administrator rights. Only the group or channel owner can manage filters. Otherwise, the bot will not grant access to the filters.', {
-                reply_markup: filterChatSettingMenu
-            });
+            await bot.sendMessage(chatId, CONST.ADD_BOT_TO_CHAT_AND_GRANT_RIGHTS, {reply_markup: filterChatSettingMenu});
 
-            if (context.chatIds?.length == 0) {
+            if (!context.chatIds || context.chatIds?.length == 0) {
                 return;
             }
             
@@ -243,11 +180,7 @@ export function handleMessage(bot: TelegramBot, myUsername: string, chatIds: Set
                 return [{ text: chat.title || `Chat ${id}`, callback_data: `chat_${id}` }];
             }));
 
-            let sentMessage = await bot.sendMessage(chatId, 'Select a chat to set filter:', {
-                reply_markup: {
-                    inline_keyboard
-                }
-            });
+            let sentMessage = await bot.sendMessage(chatId, CONST.SELECT_CHAT_TO_SET_FILTER, {reply_markup: { inline_keyboard }});
             
             context.previousMessageId = sentMessage.message_id; 
 

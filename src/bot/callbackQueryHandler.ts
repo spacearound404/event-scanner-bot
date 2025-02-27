@@ -1,14 +1,16 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { getChatContext, userState } from './utils';
+import * as CONST from '../const'
+import { getChatContext, userState, generateFilterMessage } from './utils';
 import { getFilterInlineKeyboard, getClearFilterInlineKeyboard, getEventInlineKeyboard, getGroupFilterInlineKeyboard, filterChatSettingMenu } from './keyboards';
+
 
 export function handleCallbackQuery(bot: TelegramBot) {
     bot.on('callback_query', async (query) => {
-        const chatId = query.message?.chat.id;
+        let chatId = query.message?.chat.id;
         if (!chatId) return;
         let context = getChatContext(chatId);
 
-        const data = query.data || '';
+        let data = query.data || '';
 
         if (data.startsWith('filter:')) {
             if (context.selectedChatId) {
@@ -82,31 +84,13 @@ export function handleCallbackQuery(bot: TelegramBot) {
                     break;
             }
         } else if (data.startsWith('network:')) {
-            if (context.selectedChatId) {
-                context = getChatContext(Number(context.selectedChatId));
-            }
+            context = context.selectedChatId ? getChatContext(Number(context.selectedChatId)) : context;
 
-            const networkName = data.split(':')[1];
+            let networkName = data.split(':')[1];
             context.networkName = networkName;
 
-            let message = `
-<b>🫧🫧Current filters🫧🫧</b>
 
-🏷️ Token: <b>${context?.token ? context?.token : 'not set'}</b>
-📱 Social media: <b>${context?.networkName ? context?.networkName : 'not set'}</b>
-———
-🎟️ Event: <b>${context?.eventTypes ? context?.eventTypes : 'not set'}</b>
-———
-🔗 Mint address: <b>${context?.mintAddress ? context?.mintAddress : 'not set'}</b>
-———
-📉 Min price: <b>${context?.minPrice ? context?.minPrice : 'not set'}</b>
-📈 Max price: <b>${context?.maxPrice ? context?.maxPrice : 'not set'}</b>
-
-✅ <b>Data saved</b>
-
-👇 Select a filter:`;
-
-            await bot.editMessageText(message, {
+            await bot.editMessageText(generateFilterMessage(context), {
                 chat_id: chatId,
                 parse_mode: 'HTML',
                 message_id: query.message?.message_id,
@@ -115,37 +99,14 @@ export function handleCallbackQuery(bot: TelegramBot) {
 
             context.previousMessageId = query.message?.message_id;
         } else if (data.startsWith('event:')) {
-            if (context.selectedChatId) {
-                context = getChatContext(Number(context.selectedChatId));
-            }
+            context = context.selectedChatId ? getChatContext(Number(context.selectedChatId)) : context;
 
-            const eventType = data.split(':')[1];
+            let eventType = data.split(':')[1];
             let inline_keyboard = getEventInlineKeyboard();
             let eventTypes = context.eventTypes;
 
-            const eventMap: Record<string, number> = {
-                'Mint': 0,
-                'Burn': 1,
-                'Create': 2
-            };
-
             if (eventType == 'return') {
-                let message = `
-<b>🫧🫧Current filters🫧🫧</b>
-
-🏷️ Token: <b>${context?.token ? context?.token : 'not set'}</b>
-📱 Social media: <b>${context?.networkName ? context?.networkName : 'not set'}</b>
-———
-🎟️ Event: <b>${context?.eventTypes ? context?.eventTypes : 'not set'}</b>
-———
-🔗 Mint address: <b>${context?.mintAddress ? context?.mintAddress : 'not set'}</b>
-———
-📉 Min price: <b>${context?.minPrice ? context?.minPrice : 'not set'}</b>
-📈 Max price: <b>${context?.maxPrice ? context?.maxPrice : 'not set'}</b>
-
-👇 Select a filter:`;
-
-                await bot.editMessageText(message, {
+                await bot.editMessageText(generateFilterMessage(context), {
                     chat_id: chatId,
                     parse_mode: 'HTML',
                     message_id: query.message?.message_id,
@@ -156,22 +117,22 @@ export function handleCallbackQuery(bot: TelegramBot) {
             }
 
             eventTypes?.forEach((event) => {
-                const index = eventMap[event.charAt(0).toUpperCase() + event.slice(1)];
+                let index = CONST.EVENT_MAP[event.charAt(0).toUpperCase() + event.slice(1)];
                 if (index !== undefined) {
-                    inline_keyboard.inline_keyboard[index][0].text = inline_keyboard.inline_keyboard[index][0].text.replace('⬜️', '✅');
+                    inline_keyboard.inline_keyboard[index][0].text = inline_keyboard.inline_keyboard[index][0].text.replace(CONST.UNCHECKED_BOX, CONST.CHECKED_BOX);
                 }
             });
 
-            const index = eventMap[eventType];
+            let index = CONST.EVENT_MAP[eventType];
             if (index !== undefined) {
-                const eventKey = eventType.toLowerCase();
+                let eventKey = eventType.toLowerCase();
                 if (context.eventTypes?.includes(eventKey)) {
                     context.eventTypes = context.eventTypes.filter(event => event !== eventKey);
-                    inline_keyboard.inline_keyboard[index][0].text = inline_keyboard.inline_keyboard[index][0].text.replace('✅', '⬜️');
+                    inline_keyboard.inline_keyboard[index][0].text = inline_keyboard.inline_keyboard[index][0].text.replace(CONST.CHECKED_BOX, CONST.UNCHECKED_BOX);
                 } else {
                     context.eventTypes = context.eventTypes || [];
                     context.eventTypes.push(eventKey);
-                    inline_keyboard.inline_keyboard[index][0].text = inline_keyboard.inline_keyboard[index][0].text.replace('⬜️', '✅');
+                    inline_keyboard.inline_keyboard[index][0].text = inline_keyboard.inline_keyboard[index][0].text.replace(CONST.UNCHECKED_BOX, CONST.CHECKED_BOX);
                 }
 
                 await bot.editMessageReplyMarkup(inline_keyboard, {
@@ -180,17 +141,16 @@ export function handleCallbackQuery(bot: TelegramBot) {
                 });
             }
         } else if (data.startsWith('clear:')) {
-            if (context.selectedChatId) {
-                context = getChatContext(Number(context.selectedChatId));
-            }
+            context = context.selectedChatId ? getChatContext(Number(context.selectedChatId)) : context;
 
-            const clearType = data.split(':')[1];
+            let clearType = data.split(':')[1];
+
             switch (clearType) {
                 case 'token_network':
                     context.token = undefined;
                     context.networkName = undefined;
 
-                    await bot.editMessageText('Token and network data cleared. What else to clear or return?', {
+                    await bot.editMessageText(CONST.TOKEN_AND_NETWORK_DATA_CLEARED, {
                         chat_id: chatId,
                         message_id: query.message?.message_id,
                         reply_markup: getClearFilterInlineKeyboard()
@@ -199,7 +159,7 @@ export function handleCallbackQuery(bot: TelegramBot) {
                 case 'mint_address':
                     context.mintAddress = undefined;
 
-                    await bot.editMessageText('Mint address data cleared. What else to clear or return?', {
+                    await bot.editMessageText(CONST.MINT_ADDRESS_DATA_CLEARED, {
                         chat_id: chatId,
                         message_id: query.message?.message_id,
                         reply_markup: getClearFilterInlineKeyboard()
@@ -208,7 +168,7 @@ export function handleCallbackQuery(bot: TelegramBot) {
                 case 'event':
                     context.eventTypes = undefined;
 
-                    await bot.editMessageText('Event data cleared. What else to clear or return?', {
+                    await bot.editMessageText(CONST.EVENT_DATA_CLEARED, {
                         chat_id: chatId,
                         message_id: query.message?.message_id,
                         reply_markup: getClearFilterInlineKeyboard()
@@ -218,29 +178,14 @@ export function handleCallbackQuery(bot: TelegramBot) {
                     context.maxPrice = undefined;
                     context.minPrice = undefined;
 
-                    await bot.editMessageText('Price data cleared. What else to clear or return?', {
+                    await bot.editMessageText(CONST.PRICE_DATA_CLEARED, {
                         chat_id: chatId,
                         message_id: query.message?.message_id,
                         reply_markup: getClearFilterInlineKeyboard()
                     });
                     break;
                 case 'return':
-                    let message = `
-<b>🫧🫧Current filters🫧🫧</b>
-
-🏷️ Token: <b>${context?.token ? context?.token : 'not set'}</b>
-📱 Social media: <b>${context?.networkName ? context?.networkName : 'not set'}</b>
-———
-🎟️ Event: <b>${context?.eventTypes ? context?.eventTypes : 'not set'}</b>
-———
-🔗 Mint address: <b>${context?.mintAddress ? context?.mintAddress : 'not set'}</b>
-———
-📉 Min price: <b>${context?.minPrice ? context?.minPrice : 'not set'}</b>
-📈 Max price: <b>${context?.maxPrice ? context?.maxPrice : 'not set'}</b>
-
-👇 Select a filter:`;
-
-                    await bot.editMessageText(message, {
+                    await bot.editMessageText(generateFilterMessage(context), {
                         chat_id: chatId,
                         parse_mode: 'HTML',
                         message_id: query.message?.message_id,
@@ -258,22 +203,7 @@ export function handleCallbackQuery(bot: TelegramBot) {
 
             context = getChatContext(Number(context.selectedChatId));
 
-            let message = `
-<b>🫧🫧Current filters🫧🫧</b>
-
-🏷️ Token: <b>${context?.token ? context?.token : 'not set'}</b>
-📱 Social media: <b>${context?.networkName ? context?.networkName : 'not set'}</b>
-———
-🎟️ Event: <b>${context?.eventTypes ? context?.eventTypes : 'not set'}</b>
-———
-🔗 Mint address: <b>${context?.mintAddress ? context?.mintAddress : 'not set'}</b>
-———
-📉 Min price: <b>${context?.minPrice ? context?.minPrice : 'not set'}</b>
-📈 Max price: <b>${context?.maxPrice ? context?.maxPrice : 'not set'}</b>
-
-👇 Select group a filter:`;
-
-            await bot.editMessageText(message, {
+            await bot.editMessageText(generateFilterMessage(context), {
                 chat_id: chatId,
                 message_id: query.message?.message_id,
                 parse_mode: 'HTML',
@@ -291,7 +221,7 @@ export function handleCallbackQuery(bot: TelegramBot) {
                 return [{ text: chat.title || `Chat ${id}`, callback_data: `chat_${id}` }];
             }));
 
-            await bot.editMessageText('Select a chat to set filter:', {
+            await bot.editMessageText(CONST.SELECT_CHAT_TO_SET_FILTER, {
                 chat_id: chatId,
                 message_id: query.message?.message_id,
                 reply_markup: {inline_keyboard}
@@ -323,7 +253,7 @@ export function handleCallbackQuery(bot: TelegramBot) {
             let inline_keyboard = [];
             userState[chatId] = 'returnToFilterSettings';
 
-            await bot.sendMessage(chatId, 'Add the bot to a chat first and grant it administrator rights. Only the group or channel owner can manage filters. Otherwise, the bot will not grant access to the filters.', {
+            await bot.sendMessage(chatId, CONST.ADD_BOT_TO_CHAT_AND_GRANT_RIGHTS, {
                 reply_markup: filterChatSettingMenu
             });
 
@@ -336,10 +266,8 @@ export function handleCallbackQuery(bot: TelegramBot) {
                 return [{ text: chat.title || `Chat ${id}`, callback_data: `chat_${id}` }];
             }));
 
-            let sentMessage = await bot.sendMessage(chatId, 'Select a chat to set filter:', {
-                reply_markup: {
-                    inline_keyboard
-                }
+            let sentMessage = await bot.sendMessage(chatId, CONST.SELECT_CHAT_TO_SET_FILTER, {
+                reply_markup: { inline_keyboard }
             });
             
             context.previousMessageId = sentMessage.message_id; 
